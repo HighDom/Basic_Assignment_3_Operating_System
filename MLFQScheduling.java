@@ -1,4 +1,5 @@
 import java.util.*;
+import java.util.stream.Collectors;
 public class MLFQScheduling {
     static final int TIME_PERIOD_S = 400;
     static int[] timeSlices = {10, 50, 60};
@@ -31,16 +32,16 @@ public class MLFQScheduling {
             checkForNewArrivals(processes, queues, currentTime);
 
             // Periodic Boost
-            if (currentTime % TIME_PERIOD_S == 0 && currentTime > 0) {
+            if (currentTime == TIME_PERIOD_S) {
                 System.out.println("Periodic Boost Occurred.");
-                boostAllProcesses(queues, processes);
+                boostAllProcesses(queues, processes, currentTime);
             }
 
             // Execute Processes for 1 time unit each iteration
             executeProcesses(queues, currentTime);
 
             // Print the state of each queue
-            printQueuesState(queues);
+            //printQueuesState(queues);
         }
     }
 
@@ -55,65 +56,89 @@ public class MLFQScheduling {
     }
 
     private static void executeProcesses(List<Queue<Process>> queues, int currentTime) {
+
+            // Pre-process step: Remove completed processes from each queue, not super clean but I just want to get it done!
+        for (Queue<Process> queue : queues) {
+            Iterator<Process> iterator = queue.iterator();
+            while (iterator.hasNext()) {
+                Process process = iterator.next();
+                if (process.remainingTime <= 0) {
+                    System.out.println("Removed PID: " + process.pid);
+                    iterator.remove(); // Safely remove the process if it's completed
+                }
+            }
+        }
+
         // First Pass: Check if any process is currently in progress and execute it
         for (Queue<Process> queue : queues) {
             for (Process process : queue) {
                 if (process.isInProgress()) {
                     process.executeOneUnit(queues, timeSlices, allotments, currentTime);
+                    if (!process.isInProgress()) {
+                        queue.poll(); // Remove process from the queue if it's not in progress
+                        System.out.println("timeAllottedTotal: " + process.timeAllottedTotal + " remainingTime: " + process.remainingTime);
+                        if (process.timeAllottedTotal > 0 && process.remainingTime > 0) {
+                            queues.get(process.currentQueue).add(process);
+                            //System.out.println("Check");
+                        }
+                    }
                     return; // Exit after executing the in-progress process for this time unit
                 }
             }
         }
-
+        
         // Second Pass: If no process is in progress, find the first available process to execute
         for (int i = 0; i < queues.size(); i++) {
             Queue<Process> queue = queues.get(i);
             if (!queue.isEmpty()) {
+                
+                printQueuesState(queues);
                 Process process = queue.peek();
+                //System.out.println("Check PID: " + process.pid);
                 process.executeOneUnit(queues, timeSlices, allotments, currentTime);
-    
-                if (!process.isInProgress()) {
-                    queue.poll(); // Remove process from the queue if it's not in progress
-                    if (process.timeSliceRemaining > 0 && process.remainingTime > 0) {
-                        // If the process has a time slice remaining and is not completed, re-add it to the same queue
-                        queue.add(process);
-                    }
-                }
-                break; // Only one process executed per unit of time
+
+                return;
             }
         }
     }
     
     
-    private static void boostAllProcesses(List<Queue<Process>> queues, List<Process> processes) {
-        // First, reset all processes to not in progress
+    private static void boostAllProcesses(List<Queue<Process>> queues, List<Process> processes, int currentTime) {
+        // Reset all processes to not in progress and clear all queues
         for (Process process : processes) {
             process.setInProgress(false);
         }
-    
-        // Clear all queues to prepare for the boost
         for (Queue<Process> queue : queues) {
             queue.clear();
         }
-    
-        // Reversing the order for the boost to add the largest PID first
-        processes.sort(Comparator.comparingInt(Process::getPid).reversed());
-    
-        // Add all processes back into the highest-priority queue with their time slice and allotment reset
-        for (Process process : processes) {
+
+        // Filter processes based on their arrival time before boosting
+        List<Process> arrivedProcesses = processes.stream()
+                .filter(p -> p.arrivalTime <= currentTime)
+                .collect(Collectors.toList());
+
+        // Sort arrived processes by PID in descending order
+        arrivedProcesses.sort(Comparator.comparingInt(Process::getPid).reversed());
+
+        // Add arrived processes back to the highest-priority queue with reset time slice and allotment
+        for (Process process : arrivedProcesses) {
             process.currentQueue = 0; // Reset to highest priority queue
-            process.timeSliceRemaining = timeSlices[0]; // Reset time slice based on the highest queue
-            process.timeAllottedTotal = allotments[0]; // Reset allotment time based on the highest queue
-            queues.get(0).add(process); // Add the process to the queue
+            resetProcessTimeSliceAndAllotment(process, 0); // Use a new method to reset time slice and allotment
+            queues.get(0).add(process);
         }
-    
-        System.out.println("Time " + TIME_PERIOD_S + ": Boost completed, largest PID first in the highest-priority queue.");
+
+        System.out.println("Time " + currentTime + ": Boost completed, largest PID first in the highest-priority queue.");
+    }
+
+    // New method to reset process's time slice and allotment based on its current queue
+    private static void resetProcessTimeSliceAndAllotment(Process process, int newQueue) {
+        process.currentQueue = newQueue;
+        process.timeSliceRemaining = timeSlices[newQueue];
+        process.timeAllottedTotal = allotments[newQueue];
     }
     
     
     // You might need to add getters for pid and arrivalTime in your Process class for the sorting to work correctly.
-    
-    
 
     private static void printQueuesState(List<Queue<Process>> queues) {
         for (int i = 0; i < queues.size(); i++) {
@@ -153,7 +178,26 @@ class Process {
         
     }
 
+    private static void resetProcessTimeSliceAndAllotment(Process process, int newQueue) {
+        process.currentQueue = newQueue;
+        process.timeSliceRemaining = MLFQScheduling.timeSlices[newQueue];
+        process.timeAllottedTotal = MLFQScheduling.allotments[newQueue];
+    }
+
     public void executeOneUnit(List<Queue<Process>> queues, int[] timeSlices, int[] allotments, int currentTime) {
+
+        if (this.remainingTime == 1) {
+            this.remainingTime--; // Process completes execution
+            this.timeAllottedTotal--;
+            this.timeSliceRemaining--; // Decrease time slice by one unit
+            this.setInProgress(false); // Mark as not in progress
+            // Printing before removal as it still technically executes in this time unit
+            System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
+                    this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 0, this.timeAllottedTotal);
+            // The process should be removed from the queue; this is handled in executeProcesses
+            return;
+        }
+
         // Mark the process as in progress if it's starting execution
         if (!this.isInProgress()) {
             this.executionStartTime = currentTime; // Start time of current execution
@@ -162,26 +206,33 @@ class Process {
     
         this.remainingTime--; // Decrease remaining time by one unit
         this.timeSliceRemaining--; // Decrease time slice by one unit
+        this.timeAllottedTotal--;
     
         // Check conditions for time slice completion or process completion
         if (this.timeSliceRemaining <= 0 || this.remainingTime <= 0) {
+            printExecutionStatementAndQueueOrder(queues, currentTime); 
             // Print the execution time frame
-            System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d]\n", 
-                              this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, Math.max(this.remainingTime, 0));
-    
+            //System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, Math.max(this.remainingTime, 0), this.timeAllottedTotal);
+            
             this.setInProgress(false); // Process is no longer actively executing
     
             if (this.remainingTime > 0) {
                 // Time slice is exhausted, but the process still has remaining time
                 // Check if the process's allotment time in the current queue is also exhausted
                 if (this.timeAllottedTotal <= 0 && this.currentQueue < queues.size() - 1) {
-                    // Move to a lower priority queue if possible
-                    this.currentQueue++;
-                    queues.get(this.currentQueue).add(this); // Add to the end of the next lower priority queue
+                    // Move to the next higher priority queue if the time allotment is exhausted
+                    int newQueue = this.currentQueue + 1;
+                    resetProcessTimeSliceAndAllotment(this, newQueue); // Reset time slice and allotment for the new queue
+                    //queues.get(newQueue).add(this);
                 } else {
-                    // Otherwise, re-add to the end of the current queue for round-robin scheduling
-                    queues.get(this.currentQueue).add(this);
+                    // If the time slice is exhausted but there's still remaining time
+                    if (this.timeSliceRemaining <= 0 && this.remainingTime > 0) {
+                        // Re-add to the end of the current queue for round-robin scheduling
+                        // Reset the time slice for the next execution cycle, regardless of the queue
+                        this.timeSliceRemaining = timeSlices[this.currentQueue];
+                    }
                 }
+                
             }
     
             // Reset the time slice for the next execution cycle, regardless of the queue
@@ -191,15 +242,20 @@ class Process {
         }
     
         // Decrement allotment time if the process is within its time slice
-        if (this.timeSliceRemaining > 0) {
-            this.timeAllottedTotal--;
+        
+    }
+    private void printExecutionStatementAndQueueOrder(List<Queue<Process>> queues, int currentTime) {
+        System.out.printf("\n\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
+                          this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 
+                          Math.max(this.remainingTime, 0), this.timeAllottedTotal);
+        for (int i = 0; i < queues.size(); i++) {
+            System.out.print("Queue " + (i + 1) + ": ");
+            queues.get(i).forEach(process -> System.out.print(process.getPid() + " "));
+            System.out.println();
         }
     }
     
     
-    
-    
-
     public boolean isInProgress() {
         return inProgress;
     }
