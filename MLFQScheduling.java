@@ -17,7 +17,7 @@ public class MLFQScheduling {
         processes.add(new Process(366, 445, 80));
 
         //Adds All Queues
-        List<Queue<Process>> queues = new ArrayList<>();
+        List<Deque<Process>> queues = new ArrayList<>();
         for (int i = 0; i < 3; i++) {
             queues.add(new LinkedList<>());
         }
@@ -25,8 +25,6 @@ public class MLFQScheduling {
 
         //Start the processes.
         for (int currentTime = 0; currentTime <= 700; currentTime++) {
-            //Printout Time-Slot
-            //System.out.println("Current Time-Slot: " + currentTime);
 
             // Check for new arrivals and prioritize by PID if arriving at the same time
             checkForNewArrivals(processes, queues, currentTime);
@@ -45,38 +43,38 @@ public class MLFQScheduling {
         }
     }
 
-    private static void checkForNewArrivals(List<Process> processes, List<Queue<Process>> queues, int currentTime) {
+    private static void checkForNewArrivals(List<Process> processes, List<Deque<Process>> queues, int currentTime) {
         processes.stream()
                 .filter(p -> p.arrivalTime == currentTime)
                 .forEach(p -> {
-                    queues.get(0).add(p); // Add new arrivals to the highest priority queue
+                    queues.get(0).addFirst(p); // Add new arrivals to the highest priority queue
                     System.out.print("New Arrival - " + p + "; \t");
                     System.out.println("Current Time-Slot: " + currentTime);
                 });
     }
 
-    private static void executeProcesses(List<Queue<Process>> queues, int currentTime) {
+    private static void executeProcesses(List<Deque<Process>> queues, int currentTime) {
 
             // Pre-process step: Remove completed processes from each queue, not super clean but I just want to get it done!
-        for (Queue<Process> queue : queues) {
+        for (Deque<Process> queue : queues) {
             Iterator<Process> iterator = queue.iterator();
             while (iterator.hasNext()) {
                 Process process = iterator.next();
                 if (process.remainingTime <= 0) {
-                    System.out.println("Removed PID: " + process.pid);
+                    //System.out.println("Removed PID: " + process.pid);
                     iterator.remove(); // Safely remove the process if it's completed
                 }
             }
         }
 
         // First Pass: Check if any process is currently in progress and execute it
-        for (Queue<Process> queue : queues) {
+        for (Deque<Process> queue : queues) {
             for (Process process : queue) {
                 if (process.isInProgress()) {
                     process.executeOneUnit(queues, timeSlices, allotments, currentTime);
                     if (!process.isInProgress()) {
                         queue.poll(); // Remove process from the queue if it's not in progress
-                        System.out.println("timeAllottedTotal: " + process.timeAllottedTotal + " remainingTime: " + process.remainingTime);
+                        //System.out.println("timeAllottedTotal: " + process.timeAllottedTotal + " remainingTime: " + process.remainingTime);
                         if (process.timeAllottedTotal > 0 && process.remainingTime > 0) {
                             queues.get(process.currentQueue).add(process);
                             //System.out.println("Check");
@@ -89,12 +87,10 @@ public class MLFQScheduling {
         
         // Second Pass: If no process is in progress, find the first available process to execute
         for (int i = 0; i < queues.size(); i++) {
-            Queue<Process> queue = queues.get(i);
+            Deque<Process> queue = queues.get(i);
             if (!queue.isEmpty()) {
                 
-                printQueuesState(queues);
                 Process process = queue.peek();
-                //System.out.println("Check PID: " + process.pid);
                 process.executeOneUnit(queues, timeSlices, allotments, currentTime);
 
                 return;
@@ -103,12 +99,12 @@ public class MLFQScheduling {
     }
     
     
-    private static void boostAllProcesses(List<Queue<Process>> queues, List<Process> processes, int currentTime) {
+    private static void boostAllProcesses(List<Deque<Process>> queues, List<Process> processes, int currentTime) {
         // Reset all processes to not in progress and clear all queues
         for (Process process : processes) {
             process.setInProgress(false);
         }
-        for (Queue<Process> queue : queues) {
+        for (Deque<Process> queue : queues) {
             queue.clear();
         }
 
@@ -136,15 +132,6 @@ public class MLFQScheduling {
         process.timeSliceRemaining = timeSlices[newQueue];
         process.timeAllottedTotal = allotments[newQueue];
     }
-    
-    
-    // You might need to add getters for pid and arrivalTime in your Process class for the sorting to work correctly.
-
-    private static void printQueuesState(List<Queue<Process>> queues) {
-        for (int i = 0; i < queues.size(); i++) {
-            //System.out.println("Queue " + (i + 1) + ": " + queues.get(i));
-        }
-    }
 }
 
 
@@ -161,8 +148,6 @@ class Process {
     boolean inProgress; // Indicates if the process is currently being executed
     int executionStartTime; // Tracks the start time of the current execution slice
 
-
-
     public Process(int pid, int arrivalTime, int executionTime) {
         this.pid = pid;
         this.arrivalTime = arrivalTime;
@@ -174,8 +159,6 @@ class Process {
         this.timeAllottedTotal = MLFQScheduling.allotments[currentQueue];
         this.inProgress = false; // Initialize as not in progress
         this.executionStartTime = -1; // Initialize to -1 indicating no execution has started yet
-
-        
     }
 
     private static void resetProcessTimeSliceAndAllotment(Process process, int newQueue) {
@@ -184,7 +167,7 @@ class Process {
         process.timeAllottedTotal = MLFQScheduling.allotments[newQueue];
     }
 
-    public void executeOneUnit(List<Queue<Process>> queues, int[] timeSlices, int[] allotments, int currentTime) {
+    public void executeOneUnit(List<Deque<Process>> queues, int[] timeSlices, int[] allotments, int currentTime) {
 
         if (this.remainingTime == 1) {
             this.remainingTime--; // Process completes execution
@@ -192,8 +175,10 @@ class Process {
             this.timeSliceRemaining--; // Decrease time slice by one unit
             this.setInProgress(false); // Mark as not in progress
             // Printing before removal as it still technically executes in this time unit
+            /*
             System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
                     this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 0, this.timeAllottedTotal);
+            */
             // The process should be removed from the queue; this is handled in executeProcesses
             return;
         }
@@ -211,8 +196,6 @@ class Process {
         // Check conditions for time slice completion or process completion
         if (this.timeSliceRemaining <= 0 || this.remainingTime <= 0) {
             printExecutionStatementAndQueueOrder(queues, currentTime); 
-            // Print the execution time frame
-            //System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, Math.max(this.remainingTime, 0), this.timeAllottedTotal);
             
             this.setInProgress(false); // Process is no longer actively executing
     
@@ -244,15 +227,18 @@ class Process {
         // Decrement allotment time if the process is within its time slice
         
     }
-    private void printExecutionStatementAndQueueOrder(List<Queue<Process>> queues, int currentTime) {
-        System.out.printf("\n\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
+    
+    private void printExecutionStatementAndQueueOrder(List<Deque<Process>> queues, int currentTime) {
+        System.out.printf("\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
                           this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 
                           Math.max(this.remainingTime, 0), this.timeAllottedTotal);
+        /* 
         for (int i = 0; i < queues.size(); i++) {
             System.out.print("Queue " + (i + 1) + ": ");
             queues.get(i).forEach(process -> System.out.print(process.getPid() + " "));
             System.out.println();
         }
+        */
     }
     
     
