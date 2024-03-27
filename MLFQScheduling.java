@@ -197,18 +197,6 @@ class Process {
     }
     
     
-    private void moveToNextLowerPriorityQueue(List<Queue<Process>> queues, int[] timeSlices, int[] allotments) {
-        this.currentQueue++;
-        resetTimeSliceForCurrentOrNextQueue(timeSlices);
-        queues.get(this.currentQueue).add(this);
-    }
-    
-    private void resetTimeSliceForCurrentOrNextQueue(int[] timeSlices) {
-        this.timeSliceRemaining = timeSlices[this.currentQueue];
-        this.timeAllottedTotal = MLFQScheduling.allotments[Math.min(this.currentQueue, MLFQScheduling.allotments.length - 1)];
-    }
-    
-    
     
     
 
