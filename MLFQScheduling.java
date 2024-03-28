@@ -44,14 +44,22 @@ public class MLFQScheduling {
     }
 
     private static void checkForNewArrivals(List<Process> processes, List<Deque<Process>> queues, int currentTime) {
-        processes.stream()
+        // Filter processes that are arriving at the current time
+        List<Process> arrivingProcesses = processes.stream()
                 .filter(p -> p.arrivalTime == currentTime)
-                .forEach(p -> {
-                    queues.get(0).addFirst(p); // Add new arrivals to the highest priority queue
-                    System.out.print("New Arrival - " + p + "; \t");
-                    System.out.println("Current Time-Slot: " + currentTime);
-                });
+                .sorted(Comparator.comparingInt(Process::getPid)) // Sort by PID in ascending order
+                .collect(Collectors.toList());
+    
+        // Add sorted arrivals to the front of the highest priority queue in reverse order
+        // so the lowest PID is at the front
+        for (int i = arrivingProcesses.size() - 1; i >= 0; i--) {
+            Process p = arrivingProcesses.get(i);
+            queues.get(0).addFirst(p);
+            System.out.print("New Arrival - " + p + "; \t");
+            System.out.println("Current Time-Slot: " + currentTime);
+        }
     }
+    
 
     private static void executeProcesses(List<Deque<Process>> queues, int currentTime) {
 
@@ -68,22 +76,22 @@ public class MLFQScheduling {
         }
 
         // First Pass: Check if any process is currently in progress and execute it
+        // First Pass: Check if any process is currently in progress and execute it
         for (Deque<Process> queue : queues) {
             for (Process process : queue) {
                 if (process.isInProgress()) {
                     process.executeOneUnit(queues, timeSlices, allotments, currentTime);
                     if (!process.isInProgress()) {
-                        queue.poll(); // Remove process from the queue if it's not in progress
-                        //System.out.println("timeAllottedTotal: " + process.timeAllottedTotal + " remainingTime: " + process.remainingTime);
+                        queue.remove(process); // Directly remove the specified process
                         if (process.timeAllottedTotal > 0 && process.remainingTime > 0) {
-                            queues.get(process.currentQueue).add(process);
-                            //System.out.println("Check");
+                            queues.get(process.currentQueue).add(process); // Re-add if needed based on conditions
                         }
                     }
                     return; // Exit after executing the in-progress process for this time unit
                 }
             }
         }
+
         
         // Second Pass: If no process is in progress, find the first available process to execute
         for (int i = 0; i < queues.size(); i++) {
@@ -174,6 +182,7 @@ class Process {
             this.timeAllottedTotal--;
             this.timeSliceRemaining--; // Decrease time slice by one unit
             this.setInProgress(false); // Mark as not in progress
+            printExecutionStatementAndQueueOrder(queues, currentTime);
             // Printing before removal as it still technically executes in this time unit
             /*
             System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
@@ -232,13 +241,11 @@ class Process {
         System.out.printf("\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
                           this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 
                           Math.max(this.remainingTime, 0), this.timeAllottedTotal);
-        /* 
         for (int i = 0; i < queues.size(); i++) {
             System.out.print("Queue " + (i + 1) + ": ");
             queues.get(i).forEach(process -> System.out.print(process.getPid() + " "));
             System.out.println();
         }
-        */
     }
     
     
