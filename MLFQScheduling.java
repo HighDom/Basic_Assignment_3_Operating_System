@@ -31,7 +31,8 @@ public class MLFQScheduling {
 
             // Periodic Boost
             if (currentTime == TIME_PERIOD_S) {
-                System.out.println("Periodic Boost Occurred.");
+                //System.out.println("Periodic Boost Occurred.");
+                
                 boostAllProcesses(queues, processes, currentTime);
             }
 
@@ -44,20 +45,13 @@ public class MLFQScheduling {
     }
 
     private static void checkForNewArrivals(List<Process> processes, List<Deque<Process>> queues, int currentTime) {
-        // Filter processes that are arriving at the current time
-        List<Process> arrivingProcesses = processes.stream()
+        processes.stream()
                 .filter(p -> p.arrivalTime == currentTime)
-                .sorted(Comparator.comparingInt(Process::getPid)) // Sort by PID in ascending order
-                .collect(Collectors.toList());
-    
-        // Add sorted arrivals to the front of the highest priority queue in reverse order
-        // so the lowest PID is at the front
-        for (int i = arrivingProcesses.size() - 1; i >= 0; i--) {
-            Process p = arrivingProcesses.get(i);
-            queues.get(0).addFirst(p);
-            System.out.print("New Arrival - " + p + "; \t");
-            System.out.println("Current Time-Slot: " + currentTime);
-        }
+                .forEach(p -> {
+                    queues.get(0).add(p); // Add new arrivals to the highest priority queue
+                    //System.out.print("New Arrival - " + p + "; \t");
+                    //System.out.println("Current Time-Slot: " + currentTime);
+                });
     }
     
 
@@ -110,6 +104,9 @@ public class MLFQScheduling {
     private static void boostAllProcesses(List<Deque<Process>> queues, List<Process> processes, int currentTime) {
         // Reset all processes to not in progress and clear all queues
         for (Process process : processes) {
+            if(process.inProgress) {
+                process.printExecutionStatementAndQueueOrder(queues, currentTime-1);
+            }
             process.setInProgress(false);
         }
         for (Deque<Process> queue : queues) {
@@ -131,7 +128,7 @@ public class MLFQScheduling {
             queues.get(0).add(process);
         }
 
-        System.out.println("Time " + currentTime + ": Boost completed, largest PID first in the highest-priority queue.");
+        //System.out.println("Time " + currentTime + ": Boost completed, largest PID first in the highest-priority queue.");
     }
 
     // New method to reset process's time slice and allotment based on its current queue
@@ -181,8 +178,8 @@ class Process {
             this.remainingTime--; // Process completes execution
             this.timeAllottedTotal--;
             this.timeSliceRemaining--; // Decrease time slice by one unit
-            this.setInProgress(false); // Mark as not in progress
             printExecutionStatementAndQueueOrder(queues, currentTime);
+            this.setInProgress(false); // Mark as not in progress
             // Printing before removal as it still technically executes in this time unit
             /*
             System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
@@ -237,15 +234,17 @@ class Process {
         
     }
     
-    private void printExecutionStatementAndQueueOrder(List<Deque<Process>> queues, int currentTime) {
-        System.out.printf("\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d]\n",
+    public void printExecutionStatementAndQueueOrder(List<Deque<Process>> queues, int currentTime) {
+        System.out.printf("%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d]\n",
                           this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 
                           Math.max(this.remainingTime, 0));
+        /*
         for (int i = 0; i < queues.size(); i++) {
             System.out.print("Queue " + (i + 1) + ": ");
             queues.get(i).forEach(process -> System.out.print(process.getPid() + " "));
             System.out.println();
         }
+        */
     }
     
     
