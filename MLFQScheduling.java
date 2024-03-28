@@ -238,9 +238,9 @@ class Process {
     }
     
     private void printExecutionStatementAndQueueOrder(List<Deque<Process>> queues, int currentTime) {
-        System.out.printf("\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d] [TimeAllottedTotal %d]\n",
+        System.out.printf("\n%d-%d [PID %d] [ArrivalTime %d] [Remaining_Time %d]\n",
                           this.executionStartTime, currentTime + 1, this.pid, this.arrivalTime, 
-                          Math.max(this.remainingTime, 0), this.timeAllottedTotal);
+                          Math.max(this.remainingTime, 0));
         for (int i = 0; i < queues.size(); i++) {
             System.out.print("Queue " + (i + 1) + ": ");
             queues.get(i).forEach(process -> System.out.print(process.getPid() + " "));
